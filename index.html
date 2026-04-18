@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Qwen Chat Agent</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js/lib/common.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js/styles/github-dark.min.css">
+
+  <style>
+    :root {
+      --bg: #343541;
+      --panel: #202123;
+      --panel-2: #40414f;
+      --border: #2a2b32;
+      --text: #ececf1;
+      --muted: #9ca3af;
+      --accent: #10a37f;
+      --user: #0b93f6;
+      --ai: #444654;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      height: 100vh;
+    }
+
+    .sidebar {
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      min-width: 260px;
+    }
+
+    .sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .new-chat {
+      width: 100%;
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: var(--accent);
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .chat-list {
+      overflow-y: auto;
+      padding: 8px;
+      flex: 1;
+    }
+
+    .chat-item {
+      padding: 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      margin-bottom: 8px;
+      background: transparent;
+      border: 1px solid transparent;
+    }
+
+    .chat-item:hover {
+      background: rgba(255,255,255,0.04);
+    }
+
+    .chat-item.active {
+      background: rgba(255,255,255,0.07);
+      border-color: rgba(255,255,255,0.08);
+    }
+
+    .chat-title {
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .chat-preview {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .main {
+      display: grid;
+      grid-template-rows: 1fr auto;
+      min-width: 0;
+    }
+
+    .messages {
+      overflow-y: auto;
+      padding: 24px 0 0;
+    }
+
+    .message-row {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .message {
+      width: min(900px, calc(100% - 32px));
+      padding: 18px 20px;
+      line-height: 1.65;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .message.user {
+      background: var(--user);
+      color: white;
+      border-radius: 16px;
+      margin: 12px 16px;
+      justify-self: end;
+    }
+
+    .message.assistant {
+      background: var(--ai);
+      border-radius: 16px;
+      margin: 12px 16px;
+    }
+
+    .composer-wrap {
+      border-top: 1px solid var(--border);
+      background: linear-gradient(to top, rgba(32,33,35,0.98), rgba(32,33,35,0.92));
+      padding: 16px;
+    }
+
+    .composer {
+      width: min(900px, calc(100% - 32px));
+      margin: 0 auto;
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+      background: var(--panel-2);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 18px;
+      padding: 12px;
+    }
+
+    textarea {
+      flex: 1;
+      resize: none;
+      border: 0;
+      outline: none;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      line-height: 1.5;
+      max-height: 220px;
+      min-height: 26px;
+    }
+
+    .send-btn {
+      border: 0;
+      border-radius: 12px;
+      padding: 11px 16px;
+      background: var(--accent);
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+      min-width: 88px;
+    }
+
+    .send-btn:disabled,
+    .new-chat:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    pre {
+      overflow: auto;
+      border-radius: 12px;
+      padding: 14px;
+      background: #0f172a;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .empty {
+      width: min(900px, calc(100% - 32px));
+      margin: 24px auto;
+      color: var(--muted);
+      text-align: center;
+      padding: 32px 16px;
+      border: 1px dashed rgba(255,255,255,0.12);
+      border-radius: 18px;
+    }
+
+    @media (max-width: 900px) {
+      body {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        display: none;
+      }
+
+      .message {
+        width: calc(100% - 24px);
+      }
+
+      .composer {
+        width: calc(100% - 8px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <button id="newChatBtn" class="new-chat">+ Chat baru</button>
+    </div>
+    <div id="chatList" class="chat-list"></div>
+  </aside>
+
+  <main class="main">
+    <section id="messages" class="messages">
+      <div class="empty" id="emptyState">Pilih chat atau buat chat baru.</div>
+    </section>
+
+    <div class="composer-wrap">
+      <div class="composer">
+        <textarea id="prompt" placeholder="Tulis pertanyaan coding kamu..." rows="1"></textarea>
+        <button id="sendBtn" class="send-btn">Kirim</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const API_BASE = "https://qwen.production-ai.opendnf.cloud/";
+
+    const chatListEl = document.getElementById("chatList");
+    const messagesEl = document.getElementById("messages");
+    const emptyStateEl = document.getElementById("emptyState");
+    const promptEl = document.getElementById("prompt");
+    const sendBtn = document.getElementById("sendBtn");
+    const newChatBtn = document.getElementById("newChatBtn");
+
+    let chats = [];
+    let activeChatId = localStorage.getItem("activeChatId") || "";
+    let isSending = false;
+
+    marked.setOptions({
+      breaks: true,
+      gfm: true
+    });
+
+    function escapeHtml(str) {
+      return str
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function mdToHtml(text) {
+      const html = marked.parse(text || "");
+      return DOMPurify.sanitize(html);
+    }
+
+    function scrollToBottom() {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function autoResize() {
+      promptEl.style.height = "auto";
+      promptEl.style.height = Math.min(promptEl.scrollHeight, 220) + "px";
+    }
+
+    async function api(path, options = {}) {
+      const res = await fetch(API_BASE + path, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+        },
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+
+      return await res.json();
+    }
+
+    function renderChatList() {
+      chatListEl.innerHTML = "";
+
+      if (!chats.length) {
+        chatListEl.innerHTML = '<div style="padding:16px;color:#9ca3af;">Belum ada chat.</div>';
+        return;
+      }
+
+      for (const chat of chats) {
+        const item = document.createElement("div");
+        item.className = "chat-item" + (chat.id === activeChatId ? " active" : "");
+        item.innerHTML = `
+          <div class="chat-title">${escapeHtml(chat.title || "New chat")}</div>
+          <div class="chat-preview">${escapeHtml(chat.preview || "Belum ada pesan.")}</div>
+        `;
+        item.addEventListener("click", () => openChat(chat.id));
+        chatListEl.appendChild(item);
+      }
+    }
+
+    function renderMessages(messages) {
+      messagesEl.innerHTML = "";
+
+      if (!messages || !messages.length) {
+        emptyStateEl.style.display = "block";
+        messagesEl.appendChild(emptyStateEl);
+        return;
+      }
+
+      emptyStateEl.style.display = "none";
+
+      for (const msg of messages) {
+        appendRenderedMessage(msg.role, msg.content);
+      }
+
+      scrollToBottom();
+    }
+
+    function appendRenderedMessage(role, text) {
+      const row = document.createElement("div");
+      row.className = "message-row";
+
+      const bubble = document.createElement("div");
+      bubble.className = "message " + role;
+      bubble.innerHTML = mdToHtml(text);
+
+      row.appendChild(bubble);
+      messagesEl.appendChild(row);
+
+      requestAnimationFrame(() => hljs.highlightAll());
+      scrollToBottom();
+
+      return bubble;
+    }
+
+    async function loadChats() {
+      const data = await api("/api/chats");
+      chats = data.chats || [];
+      renderChatList();
+    }
+
+    async function openChat(chatId) {
+      activeChatId = chatId;
+      localStorage.setItem("activeChatId", chatId);
+
+      const data = await api(`/api/chats/${chatId}/messages`);
+      renderMessages(data.messages || []);
+      renderChatList();
+    }
+
+    async function createChat(title = "New chat") {
+      const data = await api("/api/chats", {
+        method: "POST",
+        body: JSON.stringify({ title }),
+      });
+
+      const chat = data.chat;
+      if (!chat) throw new Error("Gagal membuat chat.");
+
+      await loadChats();
+      await openChat(chat.id);
+    }
+
+    async function ensureActiveChat() {
+      if (activeChatId) return;
+
+      if (!chats.length) {
+        await createChat();
+        return;
+      }
+
+      await openChat(chats[0].id);
+    }
+
+    async function sendMessage() {
+      const text = promptEl.value.trim();
+      if (!text || isSending) return;
+
+      await ensureActiveChat();
+
+      isSending = true;
+      sendBtn.disabled = true;
+      newChatBtn.disabled = true;
+      promptEl.disabled = true;
+
+      promptEl.value = "";
+      autoResize();
+
+      appendRenderedMessage("user", text);
+      const pendingBubble = appendRenderedMessage("assistant", "_Sedang mikir..._");
+
+      try {
+        const data = await api(`/api/chats/${activeChatId}/messages`, {
+          method: "POST",
+          body: JSON.stringify({ prompt: text }),
+        });
+
+        pendingBubble.innerHTML = mdToHtml(data.assistant || "");
+        requestAnimationFrame(() => hljs.highlightAll());
+
+        await loadChats();
+        await openChat(activeChatId);
+      } catch (err) {
+        pendingBubble.innerHTML = `<pre>${escapeHtml(String(err?.message || err))}</pre>`;
+      } finally {
+        isSending = false;
+        sendBtn.disabled = false;
+        newChatBtn.disabled = false;
+        promptEl.disabled = false;
+        promptEl.focus();
+      }
+    }
+
+    newChatBtn.addEventListener("click", async () => {
+      if (isSending) return;
+      await createChat();
+    });
+
+    sendBtn.addEventListener("click", sendMessage);
+
+    promptEl.addEventListener("input", autoResize);
+    promptEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    (async function init() {
+      try {
+        await loadChats();
+
+        if (activeChatId && chats.some((c) => c.id === activeChatId)) {
+          await openChat(activeChatId);
+        } else if (chats.length) {
+          await openChat(chats[0].id);
+        } else {
+          await createChat();
+        }
+      } catch (err) {
+        messagesEl.innerHTML = `
+          <div class="empty">
+            Gagal memuat aplikasi.<br><br>
+            ${escapeHtml(String(err?.message || err))}
+          </div>
+        `;
+      }
+
+      promptEl.focus();
+      autoResize();
+    })();
+  </script>
+</body>
+</html>
