@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="id">
+   <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Qwen Chat Agent</title>
+      <script src="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.17/lib/index.min.js"></script>  <script>
+         tailwind = {
+           config: {
+             theme: {
+               extend: {
+                 boxShadow: {
+                   soft: '0 20px 50px rgba(0,0,0,.18)'
+                 }
+               }
+             }
+           }
+         };
+      </script>  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>  <script src="https://cdn.jsdelivr.net/npm/highlight.js/lib/common.min.js"></script>  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>  
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js/styles/github-dark.min.css">
+      <style>
+         :root {
+         color-scheme: dark;
+         }
+         html, body {
+         height: 100%;
+         margin: 0;
+         background: #0f172a;
+         }
+         * {
+         box-sizing: border-box;
+         }
+         ::-webkit-scrollbar { width: 8px; height: 8px; }
+         ::-webkit-scrollbar-track { background: transparent; }
+         ::-webkit-scrollbar-thumb { background: rgba(148,163,184,.35); border-radius: 999px; }
+         ::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,.6); }
+         pre {
+         overflow: auto;
+         border-radius: 1rem;
+         margin: 1rem 0;
+         border: 1px solid rgba(255,255,255,.08);
+         }
+         code {
+         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+         font-size: 0.9em;
+         }
+         .glass {
+         background: rgba(15, 23, 42, 0.72);
+         backdrop-filter: blur(16px);
+         -webkit-backdrop-filter: blur(16px);
+         }
+         .fade-enter {
+         animation: fadeIn .18s ease-out;
+         }
+         @keyframes fadeIn {
+         from { opacity: 0; transform: translateY(6px); }
+         to { opacity: 1; transform: translateY(0); }
+         }
+         .line-clamp-2 {
+         display: -webkit-box;
+         -webkit-line-clamp: 2;
+         -webkit-box-orient: vertical;
+         overflow: hidden;
+         }
+      </style>
+   </head>
+   <body class="text-slate-100 bg-slate-950">
+      <!-- Splash -->
+      <div id="splash" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950">
+         <div class="relative w-[min(92vw,420px)] rounded-3xl border border-white/10 bg-white/5 p-8 shadow-soft overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-br from-indigo-500/15 via-cyan-500/10 to-emerald-500/10"></div>
+            <div class="relative text-center">
+               <div id="splashOrb" class="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-soft">
+                  <span class="text-3xl font-black tracking-tight">Q</span>
+               </div>
+               <h1 class="text-2xl font-semibold tracking-tight">Qwen Chat Agent</h1>
+               <p class="mt-2 text-sm text-slate-300/80">Local chat • Permanent memory • Fast UI</p>
+               <div class="mt-7 h-2 overflow-hidden rounded-full bg-white/10">
+                  <div id="splashBar" class="h-full w-0 rounded-full bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400"></div>
+               </div>
+               <p id="splashText" class="mt-3 text-xs text-slate-400">Loading…</p>
+            </div>
+         </div>
+      </div>
+      <div class="grid h-screen grid-cols-1 md:grid-cols-[320px_1fr]">
+         <!-- Sidebar -->
+         <aside class="glass border-b border-white/10 md:border-b-0 md:border-r md:border-white/10 flex flex-col min-h-0">
+            <div class="p-4 border-b border-white/10">
+               <button id="newChatBtn" class="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-semibold shadow-soft transition hover:bg-indigo-500 active:scale-[.99]">
+               <span>＋</span>
+               New Chat
+               </button>
+            </div>
+            <div class="p-4 space-y-5 min-h-0 flex-1 overflow-auto">
+               <section class="rounded-3xl border border-white/10 bg-white/5 p-4">
+                  <div class="flex items-center justify-between gap-3 mb-3">
+                     <h2 class="text-sm font-semibold tracking-wide text-slate-200">Permanent Memory</h2>
+                     <span id="memoryCount" class="text-xs text-slate-400">0/10</span>
+                  </div>
+                  <div class="flex gap-2">
+                     <input id="memoryInput" type="text" placeholder="Tambah memory..." class="min-w-0 flex-1 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm outline-none placeholder:text-slate-500 focus:border-cyan-400" />
+                     <button id="addMemoryBtn" class="shrink-0 rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold transition hover:bg-emerald-500">Add</button>
+                  </div>
+                  <div class="mt-3 flex gap-2">
+                     <button id="clearMemoriesBtn" class="rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5">Clear all</button>
+                     <button id="toggleMemoryBtn" class="rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5">Show/Hide</button>
+                  </div>
+                  <div id="memoryList" class="mt-4 space-y-2 max-h-64 overflow-auto pr-1"></div>
+               </section>
+               <section class="rounded-3xl border border-white/10 bg-white/5 p-4">
+                  <div class="flex items-center justify-between mb-3">
+                     <h2 class="text-sm font-semibold tracking-wide text-slate-200">Chats</h2>
+                     <span id="chatCount" class="text-xs text-slate-400"></span>
+                  </div>
+                  <div id="chatList" class="space-y-2 max-h-[40vh] overflow-auto pr-1"></div>
+               </section>
+            </div>
+         </aside>
+         <!-- Main -->
+         <main class="flex min-h-0 flex-col">
+            <header class="glass border-b border-white/10 px-4 py-4 md:px-6">
+               <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                     <h1 id="activeChatTitle" class="text-lg font-semibold tracking-tight">New chat</h1>
+                     <p class="text-xs text-slate-400">All chats saved in localStorage</p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2">
+                     <button id="exportBtn" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm transition hover:bg-white/10">Export</button>
+                     <label class="cursor-pointer rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm transition hover:bg-white/10">
+                     Import
+                     <input id="importInput" type="file" accept="application/json" class="hidden" />
+                     </label>
+                     <button id="renameBtn" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm transition hover:bg-white/10">Rename</button>
+                     <button id="deleteBtn" class="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 text-sm text-rose-200 transition hover:bg-rose-500/20">Delete</button>
+                  </div>
+               </div>
+            </header>
+            <section id="messages" class="flex-1 overflow-auto px-3 py-4 sm:px-4">
+               <div id="emptyState" class="mx-auto mt-10 w-full max-w-3xl rounded-3xl border border-dashed border-white/10 bg-white/5 p-10 text-center text-slate-400">
+                  <div class="text-xl font-semibold text-slate-200">Welcome</div>
+                  <div class="mt-2 text-sm">Mulai chat baru, atau pilih percakapan dari sidebar.</div>
+                  <div class="mt-1 text-xs text-slate-500">Memory permanen akan ikut dibawa saat kirim pesan.</div>
+               </div>
+            </section>
+            <footer class="glass border-t border-white/10 p-4 md:p-6">
+               <div class="mx-auto max-w-4xl">
+                  <div class="rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-3 shadow-soft">
+                     <textarea id="prompt" rows="1" placeholder="Tulis pesan... (Ctrl/Cmd + Enter untuk kirim)" class="max-h-56 min-h-[48px] w-full resize-none border-0 bg-transparent px-3 py-2 text-sm leading-6 outline-none placeholder:text-slate-500"></textarea>
+                     <div class="mt-3 flex items-center justify-between gap-3 px-3 pb-1">
+                        <div id="statusText" class="text-xs text-slate-400">Siap.</div>
+                        <button id="sendBtn" class="inline-flex items-center justify-center rounded-2xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold shadow-soft transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60">Send</button>
+                     </div>
+                  </div>
+               </div>
+            </footer>
+         </main>
+      </div>
+      <script>
+         // ===== CONFIG =====
+         const API_URL = "https://qwen.production-ai.opendnf.cloud/api/chat";
+         const STORAGE_KEY = "qwen_local_chat_v3";
+         const ACTIVE_KEY = "qwen_local_active_v3";
+         const MEMORIES_KEY = "qwen_local_memories_v3";
+         const MEMORY_LIMIT = 10;
+         
+         // ===== DOM =====
+         const $ = (id) => document.getElementById(id);
+         const ui = {
+           splash: $("splash"),
+           splashBar: $("splashBar"),
+           splashText: $("splashText"),
+           splashOrb: $("splashOrb"),
+           chatList: $("chatList"),
+           chatCount: $("chatCount"),
+           messageArea: $("messages"),
+           emptyState: $("emptyState"),
+           activeChatTitle: $("activeChatTitle"),
+           prompt: $("prompt"),
+           sendBtn: $("sendBtn"),
+           newChatBtn: $("newChatBtn"),
+           renameBtn: $("renameBtn"),
+           deleteBtn: $("deleteBtn"),
+           exportBtn: $("exportBtn"),
+           importInput: $("importInput"),
+           statusText: $("statusText"),
+           memoryInput: $("memoryInput"),
+           addMemoryBtn: $("addMemoryBtn"),
+           memoryList: $("memoryList"),
+           memoryCount: $("memoryCount"),
+           clearMemoriesBtn: $("clearMemoriesBtn"),
+           toggleMemoryBtn: $("toggleMemoryBtn"),
+         };
+         
+         // ===== STATE =====
+         let chats = [];
+         let activeChatId = localStorage.getItem(ACTIVE_KEY) || "";
+         let memories = [];
+         let sending = false;
+         let memoryVisible = true;
+         
+         // ===== MARKDOWN / HIGHLIGHT =====
+         marked.setOptions({ breaks: true, gfm: true });
+         
+         // ===== UTILS =====
+         function uid() {
+           return crypto.randomUUID ? crypto.randomUUID() : "id-" + Math.random().toString(36).slice(2);
+         }
+         
+         function now() {
+           return new Date().toISOString();
+         }
+         
+         function escapeHtml(str) {
+           return String(str)
+             .replaceAll("&", "&amp;")
+             .replaceAll("<", "&lt;")
+             .replaceAll(">", "&gt;")
+             .replaceAll('"', "&quot;")
+             .replaceAll("'", "&#039;");
+         }
+         
+         function mdToHtml(text) {
+           const html = marked.parse(text || "");
+           return DOMPurify.sanitize(html);
+         }
+         
+         function setStatus(text) {
+           ui.statusText.textContent = text;
+         }
+         
+         function scrollMessagesToBottom() {
+           ui.messageArea.scrollTop = ui.messageArea.scrollHeight;
+         }
+         
+         function autoResize() {
+           ui.prompt.style.height = "auto";
+           ui.prompt.style.height = Math.min(ui.prompt.scrollHeight, 220) + "px";
+         }
+         
+         function saveAll() {
+           localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
+           localStorage.setItem(ACTIVE_KEY, activeChatId);
+           localStorage.setItem(MEMORIES_KEY, JSON.stringify(memories));
+         }
+         
+         function loadAll() {
+           try {
+             chats = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+           } catch {
+             chats = [];
+           }
+         
+           try {
+             memories = JSON.parse(localStorage.getItem(MEMORIES_KEY) || "[]");
+           } catch {
+             memories = [];
+           }
+         
+           if (!Array.isArray(chats)) chats = [];
+           if (!Array.isArray(memories)) memories = [];
+         
+           chats = chats
+             .filter((c) => c && typeof c === "object")
+             .map((c) => ({
+               id: String(c.id || uid()),
+               title: String(c.title || "New chat"),
+               messages: Array.isArray(c.messages) ? c.messages : [],
+               createdAt: String(c.createdAt || now()),
+               updatedAt: String(c.updatedAt || now()),
+             }));
+         
+           memories = memories
+             .filter((m) => typeof m === "string")
+             .map((m) => m.trim())
+             .filter(Boolean)
+             .slice(0, MEMORY_LIMIT);
+         
+           activeChatId = localStorage.getItem(ACTIVE_KEY) || "";
+           if (!activeChatId || !chats.some((c) => c.id === activeChatId)) {
+             activeChatId = chats[0]?.id || "";
+           }
+         
+           if (!activeChatId) createChat(false);
+         
+           saveAll();
+         }
+         
+         function getActiveChat() {
+           return chats.find((c) => c.id === activeChatId) || null;
+         }
+         
+         function createChat(renderNow = true) {
+           const chat = {
+             id: uid(),
+             title: "New chat",
+             messages: [],
+             createdAt: now(),
+             updatedAt: now(),
+           };
+           chats.unshift(chat);
+           activeChatId = chat.id;
+           saveAll();
+           if (renderNow) render();
+           return chat;
+         }
+         
+         function deleteChat(chatId) {
+           chats = chats.filter((c) => c.id !== chatId);
+         
+           if (activeChatId === chatId) {
+             activeChatId = chats[0]?.id || "";
+           }
+         
+           if (!activeChatId) createChat(false);
+         
+           saveAll();
+           render();
+           setStatus("Chat dihapus.");
+         }
+         
+         function renameActiveChat() {
+           const chat = getActiveChat();
+           if (!chat) return;
+         
+           const next = prompt("Nama chat baru:", chat.title || "New chat");
+           if (next === null) return;
+         
+           const trimmed = next.trim().slice(0, 80);
+           chat.title = trimmed || "New chat";
+           chat.updatedAt = now();
+           saveAll();
+           render();
+         }
+         
+         function clearAllChats() {
+           if (!confirm("Hapus semua chat lokal?")) return;
+           chats = [];
+           activeChatId = "";
+           localStorage.removeItem(STORAGE_KEY);
+           localStorage.removeItem(ACTIVE_KEY);
+           createChat();
+           render();
+           setStatus("Semua chat dibersihkan.");
+         }
+         
+         function addMemory(text) {
+           const val = text.trim();
+           if (!val) return;
+           if (memories.length >= MEMORY_LIMIT) {
+             alert(`Memory sudah penuh. Maksimal ${MEMORY_LIMIT}.`);
+             return;
+           }
+           memories.unshift(val.slice(0, 220));
+           saveAll();
+           renderMemories();
+           ui.memoryInput.value = "";
+           setStatus("Memory ditambahkan.");
+         }
+         
+         function deleteMemory(index) {
+           memories.splice(index, 1);
+           saveAll();
+           renderMemories();
+           setStatus("Memory dihapus.");
+         }
+         
+         function clearMemories() {
+           if (!confirm("Hapus semua permanent memory?")) return;
+           memories = [];
+           saveAll();
+           renderMemories();
+           setStatus("Semua memory dihapus.");
+         }
+         
+         function buildMemoryContext() {
+           if (!memories.length) return "";
+           return [
+             "Permanent memory (follow strictly when relevant):",
+             ...memories.map((m, i) => `${i + 1}. ${m}`),
+           ].join("\n");
+         }
+         
+         function autoTitle(chat) {
+           if (!chat || chat.title !== "New chat") return;
+           const firstUser = chat.messages.find((m) => m.role === "user");
+           if (!firstUser) return;
+         
+           const title = firstUser.content
+             .replace(/```[\s\S]*?```/g, " ")
+             .replace(/\s+/g, " ")
+             .trim()
+             .replace(/[.!?]+$/g, "")
+             .slice(0, 48);
+         
+           if (title) chat.title = title;
+         }
+         
+         // ===== RENDER =====
+         function renderChatList() {
+           ui.chatList.innerHTML = "";
+           ui.chatCount.textContent = `${chats.length}/∞`;
+         
+           if (!chats.length) {
+             ui.chatList.innerHTML = `
+               <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-center text-sm text-slate-400">
+                 Belum ada chat.
+               </div>
+             `;
+             return;
+           }
+         
+           for (const chat of chats) {
+             const item = document.createElement("div");
+             item.className = `group relative cursor-pointer rounded-2xl border p-3 transition ${chat.id === activeChatId ? "border-cyan-400/40 bg-cyan-400/10" : "border-white/10 bg-white/5 hover:bg-white/10"}`;
+         
+             const last = chat.messages.at(-1)?.content || "Belum ada pesan";
+         
+             item.innerHTML = `
+               <div class="flex items-start gap-3 pr-8">
+                 <div class="min-w-0 flex-1">
+                   <div class="text-sm font-semibold text-slate-100 truncate">${escapeHtml(chat.title)}</div>
+                   <div class="mt-1 text-xs text-slate-400 line-clamp-2">${escapeHtml(last)}</div>
+                 </div>
+               </div>
+               <button data-del="${chat.id}" class="absolute right-2 top-2 rounded-xl px-2 py-1 text-xs text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-white/10 hover:text-rose-200">✕</button>
+             `;
+         
+             item.addEventListener("click", (e) => {
+               if (e.target.closest("[data-del]")) return;
+               activeChatId = chat.id;
+               saveAll();
+               render();
+             });
+         
+             item.querySelector("[data-del]").addEventListener("click", (e) => {
+               e.stopPropagation();
+               deleteChat(chat.id);
+             });
+         
+             ui.chatList.appendChild(item);
+           }
+         }
+         
+         function renderMemories() {
+           ui.memoryList.innerHTML = "";
+           ui.memoryCount.textContent = `${memories.length}/${MEMORY_LIMIT}`;
+           ui.memoryList.style.display = memoryVisible ? "block" : "none";
+         
+           if (!memoryVisible) return;
+         
+           if (!memories.length) {
+             ui.memoryList.innerHTML = `
+               <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-3 text-xs text-slate-500">
+                 Belum ada permanent memory.
+               </div>
+             `;
+             return;
+           }
+         
+           memories.forEach((m, i) => {
+             const row = document.createElement("div");
+             row.className = "group rounded-2xl border border-white/10 bg-slate-950/70 p-3 text-sm text-slate-200";
+             row.innerHTML = `
+               <div class="flex items-start gap-2">
+                 <div class="min-w-0 flex-1 break-words">${escapeHtml(m)}</div>
+                 <button class="shrink-0 rounded-lg px-2 py-1 text-xs text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-white/10 hover:text-rose-200">Delete</button>
+               </div>
+             `;
+             row.querySelector("button").addEventListener("click", () => deleteMemory(i));
+             ui.memoryList.appendChild(row);
+           });
+         }
+         
+         function renderMessages() {
+           const chat = getActiveChat();
+           ui.messageArea.innerHTML = "";
+         
+           if (!chat || !chat.messages.length) {
+             ui.messageArea.appendChild(ui.emptyState);
+             ui.emptyState.style.display = "block";
+             ui.activeChatTitle.textContent = chat?.title || "New chat";
+             return;
+           }
+         
+           ui.emptyState.style.display = "none";
+           ui.activeChatTitle.textContent = chat.title || "New chat";
+         
+           for (const msg of chat.messages) {
+             appendMessage(msg.role, msg.content);
+           }
+         
+           scrollMessagesToBottom();
+         }
+         
+         function appendMessage(role, text) {
+           const row = document.createElement("div");
+           row.className = "fade-enter mx-auto mb-4 max-w-4xl";
+         
+           const outer = document.createElement("div");
+           outer.className = role === "user" ? "flex justify-end" : "flex justify-start";
+         
+           const bubble = document.createElement("div");
+           bubble.className = role === "user"
+             ? "max-w-[92%] sm:max-w-[80%] rounded-3xl rounded-br-md bg-indigo-600 px-4 py-3 shadow-soft"
+             : "max-w-[92%] sm:max-w-[80%] rounded-3xl rounded-bl-md border border-white/10 bg-white/5 px-4 py-3";
+         
+           const label = role === "user" ? "You" : "Assistant";
+           const labelColor = role === "user" ? "text-indigo-100" : "text-slate-400";
+           const content = document.createElement("div");
+           content.innerHTML = role === "assistant"
+             ? mdToHtml(text)
+             : `<div class="whitespace-pre-wrap break-words">${escapeHtml(text)}</div>`;
+         
+           bubble.innerHTML = `
+             <div class="mb-1 text-[11px] font-semibold uppercase tracking-[0.22em] ${labelColor}">${label}</div>
+           `;
+           bubble.appendChild(content);
+           outer.appendChild(bubble);
+           row.appendChild(outer);
+           ui.messageArea.appendChild(row);
+         
+           requestAnimationFrame(() => hljs.highlightAll());
+           return content;
+         }
+         
+         function render() {
+           renderChatList();
+           renderMemories();
+           renderMessages();
+           saveAll();
+         }
+         
+         // ===== API =====
+         async function askAI(chat) {
+           const memoryContext = buildMemoryContext();
+           const payloadMessages = [];
+         
+           if (memoryContext) {
+             payloadMessages.push({
+               role: "user",
+               content: `Use this context as persistent memory. Do not repeat it unless relevant.\n\n${memoryContext}`
+             });
+           }
+         
+           payloadMessages.push(...chat.messages.map((m) => ({
+             role: m.role,
+             content: m.content,
+           })));
+         
+           const res = await fetch(API_URL, {
+             method: "POST",
+             headers: { "Content-Type": "application/json" },
+             body: JSON.stringify({
+               messages: payloadMessages,
+               temperature: 0.35,
+             }),
+           });
+         
+           const raw = await res.text();
+           let data = {};
+           try {
+             data = raw ? JSON.parse(raw) : {};
+           } catch {
+             data = { error: raw };
+           }
+         
+           if (!res.ok) {
+             throw new Error(data?.detail || data?.error || raw || `HTTP ${res.status}`);
+           }
+         
+           return String(data.assistant || "").trim();
+         }
+         
+         // ===== SEND FLOW =====
+         async function sendMessage() {
+           const text = ui.prompt.value.trim();
+           if (!text || sending) return;
+         
+           const chat = getActiveChat() || createChat(false);
+           sending = true;
+           ui.sendBtn.disabled = true;
+           ui.newChatBtn.disabled = true;
+           ui.renameBtn.disabled = true;
+           ui.deleteBtn.disabled = true;
+           ui.prompt.disabled = true;
+           setStatus("Mengirim...");
+         
+           ui.prompt.value = "";
+           autoResize();
+         
+           chat.messages.push({ role: "user", content: text, createdAt: now() });
+           autoTitle(chat);
+           chat.updatedAt = now();
+           saveAll();
+           renderMessages();
+           renderChatList();
+         
+           const pending = appendMessage("assistant", "_Sedang berpikir..._");
+           scrollMessagesToBottom();
+         
+           try {
+             const reply = await askAI(chat);
+             const finalText = reply || "Maaf, aku belum bisa kasih jawaban yang pas.";
+         
+             pending.innerHTML = mdToHtml(finalText);
+             chat.messages.push({ role: "assistant", content: finalText, createdAt: now() });
+             chat.updatedAt = now();
+             autoTitle(chat);
+             saveAll();
+             renderChatList();
+             ui.activeChatTitle.textContent = chat.title;
+             requestAnimationFrame(() => hljs.highlightAll());
+             setStatus("Selesai.");
+           } catch (err) {
+             pending.innerHTML = `<pre class="bg-rose-500/10 border border-rose-500/30 px-4 py-3 text-sm text-rose-200">${escapeHtml(String(err?.message || err))}</pre>`;setStatus("Gagal mengirim.");
+         } finally {
+         sending = false;
+         ui.sendBtn.disabled = false;
+         ui.newChatBtn.disabled = false;
+         ui.renameBtn.disabled = false;
+         ui.deleteBtn.disabled = false;
+         ui.prompt.disabled = false;
+         ui.prompt.focus();
+         autoResize();
+         }
+         }
+         
+         // ===== EXPORT / IMPORT =====
+         function exportData() {
+         const blob = new Blob([
+         JSON.stringify({
+           chats,
+           activeChatId,
+           memories,
+           exportedAt: now()
+         }, null, 2)
+         ], { type: "application/json" });
+         
+         const url = URL.createObjectURL(blob);
+         const a = document.createElement("a");
+         a.href = url;
+         a.download = "qwen-chat-export.json";
+         a.click();
+         URL.revokeObjectURL(url);
+         }
+         
+         async function importData(file) {
+         const text = await file.text();
+         const data = JSON.parse(text);
+         
+         if (!data || !Array.isArray(data.chats)) {
+         throw new Error("Format file tidak valid.");
+         }
+         
+         chats = data.chats
+         .filter((c) => c && typeof c === "object")
+         .map((c) => ({
+           id: String(c.id || uid()),
+           title: String(c.title || "New chat"),
+           messages: Array.isArray(c.messages) ? c.messages : [],
+           createdAt: String(c.createdAt || now()),
+           updatedAt: String(c.updatedAt || now()),
+         }));
+         
+         memories = Array.isArray(data.memories)
+         ? data.memories.filter((m) => typeof m === "string").map((m) => m.trim()).filter(Boolean).slice(0, MEMORY_LIMIT)
+         : [];
+         
+         activeChatId = String(data.activeChatId || chats[0]?.id || "");
+         if (!activeChatId && chats[0]) activeChatId = chats[0].id;
+         
+         if (!activeChatId) createChat(false);
+         
+         saveAll();
+         render();
+         setStatus("Import selesai.");
+         }
+         
+         // ===== SPLASH =====
+         function runSplash() {
+         anime({
+         targets: ui.splashOrb,
+         scale: [0.85, 1],
+         rotate: [0, 360],
+         duration: 1200,
+         easing: 'easeOutElastic(1, .7)'
+         });
+         
+         anime({
+         targets: ui.splashBar,
+         width: ['0%', '100%'],
+         duration: 1400,
+         easing: 'easeInOutQuad'
+         });
+         
+         anime({
+         targets: ui.splashText,
+         opacity: [0.5, 1],
+         duration: 700,
+         direction: 'alternate',
+         loop: true,
+         easing: 'linear'
+         });
+         
+         window.addEventListener('load', () => {
+         setTimeout(() => {
+           anime({
+             targets: ui.splash,
+             opacity: [1, 0],
+             duration: 500,
+             easing: 'easeOutQuad',
+             complete: () => {
+               ui.splash.style.display = 'none';
+             }
+           });
+         }, 900);
+         });
+         }
+         
+         // ===== EVENTS =====
+         ui.newChatBtn.addEventListener("click", () => {
+         if (sending) return;
+         createChat();
+         render();
+         ui.prompt.focus();
+         });
+         
+         ui.renameBtn.addEventListener("click", () => {
+         if (sending) return;
+         renameActiveChat();
+         });
+         
+         ui.deleteBtn.addEventListener("click", () => {
+         if (sending) return;
+         const chat = getActiveChat();
+         if (!chat) return;
+         if (!confirm(`Hapus chat \"${chat.title}\"?`)) return;
+         deleteChat(chat.id);
+         });
+         
+         ui.sendBtn.addEventListener("click", sendMessage);
+         
+         ui.prompt.addEventListener("input", autoResize);
+         ui.prompt.addEventListener("keydown", (e) => {
+         if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+         e.preventDefault();
+         sendMessage();
+         }
+         });
+         
+         ui.addMemoryBtn.addEventListener("click", () => addMemory(ui.memoryInput.value));
+         ui.memoryInput.addEventListener("keydown", (e) => {
+         if (e.key === "Enter") {
+         e.preventDefault();
+         addMemory(ui.memoryInput.value);
+         }
+         });
+         
+         ui.clearMemoriesBtn.addEventListener("click", clearMemories);
+         ui.toggleMemoryBtn.addEventListener("click", () => {
+         memoryVisible = !memoryVisible;
+         renderMemories();
+         ui.toggleMemoryBtn.textContent = memoryVisible ? "Show/Hide" : "Show Memory";
+         });
+         
+         ui.exportBtn.addEventListener("click", exportData);
+         ui.importInput.addEventListener("change", async () => {
+         const file = ui.importInput.files?.[0];
+         if (!file) return;
+         try {
+         await importData(file);
+         } catch (err) {
+         alert("Gagal import: " + String(err?.message || err));
+         } finally {
+         ui.importInput.value = "";
+         }
+         });
+         
+         // ===== INIT =====
+         (function init() {
+         try {
+         loadAll();
+         render();
+         autoResize();
+         ui.prompt.focus();
+         runSplash();
+         setStatus("Siap.");
+         } catch (err) {
+         ui.messageArea.innerHTML = `
+           <div class="mx-auto mt-10 max-w-3xl rounded-3xl border border-rose-500/20 bg-rose-500/10 p-6 text-rose-100">
+             <div class="text-lg font-semibold">Initialization Error</div>
+             <div class="mt-2 text-sm text-rose-100/80">${escapeHtml(String(err?.message || err))}</div>
+           </div>
+         `;
+         console.error(err);
+         }
+         })();
+         
+      </script>
+   </body>
+</html>
