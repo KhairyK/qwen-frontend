@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Qwen Chat Agent</title>
+    <script src="https://cdn.tailwindcss.com/"></script>  
+    <script>
+        tailwind = {
+            config: {
+                theme: {
+                    extend: {
+                        boxShadow: {
+                            soft: '0 20px 50px rgba(0,0,0,.18)',
+                            glow: '0 0 15px rgba(56, 189, 248, 0.5)'
+                        },
+                        colors: {
+                            slate: { 950: '#020617' }
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js/lib/common.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>  
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js/styles/github-dark.min.css">
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+        html, body {
+            height: 100%;
+            margin: 0;
+            background: #020617;
+            overflow: hidden; /* Prevent body scroll, handle scroll in containers */
+        }
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(148,163,184,.2); border-radius: 999px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,.5); }
+        pre {
+            overflow: auto;
+            border-radius: 0.75rem;
+            margin: 1rem 0;
+            border: 1px solid rgba(255,255,255,.1);
+            background: #0f172a !important; /* Slightly lighter than background for contrast */
+        }
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+            font-size: 0.875em;
+        }
+        .glass {
+            background: rgba(2, 6, 23, 0.75);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .fade-enter {
+            animation: fadeIn .25s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        /* Custom markdown stylings */
+        .markdown-body p { margin-bottom: 0.75rem; }
+        .markdown-body p:last-child { margin-bottom: 0; }
+        .markdown-body ul, .markdown-body ol { margin-left: 1.5rem; margin-bottom: 0.75rem; }
+        .markdown-body ul { list-style-type: disc; }
+        .markdown-body ol { list-style-type: decimal; }
+        .markdown-body a { color: #38bdf8; text-decoration: underline; }
+    </style>
+</head>
+<body class="text-slate-200 bg-slate-950 font-sans antialiased">
+    <div id="splash" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950 transition-opacity duration-500">
+        <div class="relative w-[min(90vw,400px)] rounded-[2rem] border border-white/10 bg-white/5 p-10 shadow-soft overflow-hidden backdrop-blur-md">
+            <div class="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-cyan-500/5 to-emerald-500/10"></div>
+            <div class="relative text-center">
+                <div id="splashOrb" class="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-[2rem] bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-glow">
+                    <span class="text-4xl font-black tracking-tighter text-white">Q</span>
+                </div>
+                <h1 class="text-2xl font-bold tracking-tight text-white">Qwen Chat</h1>
+                <p class="mt-2 text-sm text-slate-400">Local processing • Persistent memory</p>
+                <div class="mt-8 h-1.5 overflow-hidden rounded-full bg-white/5">
+                    <div id="splashBar" class="h-full w-0 rounded-full bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400"></div>
+                </div>
+                <p id="splashText" class="mt-4 text-xs font-medium uppercase tracking-widest text-slate-500">Initializing Core...</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="sidebarOverlay" class="fixed inset-0 z-40 hidden bg-black/60 backdrop-blur-sm transition-opacity opacity-0 md:hidden"></div>
+
+    <div class="flex h-screen w-full overflow-hidden">
+        <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 flex w-[320px] flex-col glass border-r border-white/10 transform -translate-x-full transition-transform duration-300 ease-in-out md:relative md:translate-x-0">
+            <button id="closeSidebarBtn" class="absolute right-4 top-4 rounded-full p-2 text-slate-400 hover:bg-white/10 hover:text-white md:hidden" aria-label="Close sidebar">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+
+            <div class="p-5 border-b border-white/5">
+                <button id="newChatBtn" class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-soft transition-all hover:bg-indigo-500 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
+                    New Chat
+                </button>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-4 space-y-6">
+                <section class="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Memory Context</h2>
+                        <span id="memoryCount" class="text-xs font-medium text-slate-500 bg-black/20 px-2 py-0.5 rounded-full">0/10</span>
+                    </div>
+                    <div class="flex gap-2 mb-3">
+                        <input id="memoryInput" type="text" placeholder="Add custom context..." class="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" />
+                        <button id="addMemoryBtn" class="shrink-0 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 px-3 py-2 text-sm font-medium transition hover:bg-emerald-600/30 hover:text-emerald-300 focus-visible:ring-2 focus-visible:ring-emerald-400">Add</button>
+                    </div>
+                    <div class="flex flex-wrap gap-2 mb-3">
+                        <button id="toggleMemoryBtn" class="flex-1 rounded-lg bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-white/10">Hide Context</button>
+                        <button id="clearMemoriesBtn" class="flex-1 rounded-lg bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-400 transition hover:bg-rose-500/20">Clear All</button>
+                    </div>
+                    <div id="memoryList" class="space-y-2 max-h-48 overflow-y-auto pr-1"></div>
+                </section>
+
+                <section>
+                    <div class="flex items-center justify-between mb-3 px-1">
+                        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Recent Chats</h2>
+                        <span id="chatCount" class="text-xs text-slate-500"></span>
+                    </div>
+                    <div id="chatList" class="space-y-1.5"></div>
+                </section>
+            </div>
+        </aside>
+
+        <main class="flex min-w-0 flex-1 flex-col relative z-10">
+            <header class="glass border-b border-white/10 px-4 py-3 sm:px-6 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <button id="menuToggleBtn" class="rounded-lg p-2 -ml-2 text-slate-300 hover:bg-white/10 hover:text-white md:hidden" aria-label="Open sidebar">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                    </button>
+                    <div class="min-w-0">
+                        <h1 id="activeChatTitle" class="truncate text-base font-semibold text-white">New chat</h1>
+                        <p class="truncate text-[11px] text-slate-400">Secured locally in browser</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-1.5 shrink-0 ml-4">
+                    <label class="cursor-pointer rounded-lg p-2 text-slate-400 transition hover:bg-white/10 hover:text-white" title="Import Chat">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                        <input id="importInput" type="file" accept="application/json" class="hidden" />
+                    </label>
+                    <button id="exportBtn" class="rounded-lg p-2 text-slate-400 transition hover:bg-white/10 hover:text-white" title="Export Chat">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    </button>
+                    <div class="w-px h-5 bg-white/10 mx-1"></div>
+                    <button id="renameBtn" class="rounded-lg p-2 text-slate-400 transition hover:bg-white/10 hover:text-white" title="Rename Chat">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                    </button>
+                    <button id="deleteBtn" class="rounded-lg p-2 text-rose-400/70 transition hover:bg-rose-500/10 hover:text-rose-400" title="Delete Chat">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                </div>
+            </header>
+
+            <section id="messages" class="flex-1 overflow-y-auto p-4 sm:p-6 scroll-smooth">
+                <div id="emptyState" class="mx-auto mt-12 w-full max-w-2xl rounded-[2rem] border border-dashed border-white/10 bg-white/[0.02] p-10 text-center backdrop-blur-sm">
+                    <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-400">
+                        <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-white tracking-tight">How can I help you today?</h3>
+                    <p class="mt-3 text-sm text-slate-400 leading-relaxed">Start a new conversation below. Any context added to your Permanent Memory will automatically guide the responses.</p>
+                </div>
+            </section>
+
+            <footer class="glass border-t border-white/5 p-4 sm:p-6 shrink-0">
+                <div class="mx-auto max-w-4xl">
+                    <div class="relative flex flex-col rounded-2xl border border-white/10 bg-slate-900/80 p-2 shadow-lg transition-colors focus-within:border-indigo-500/50 focus-within:bg-slate-900">
+                        <textarea id="prompt" rows="1" placeholder="Send a message... (Shift + Enter for new line)" class="max-h-60 min-h-[52px] w-full resize-none border-0 bg-transparent px-3 pt-3.5 pb-2 text-[15px] leading-relaxed text-white outline-none placeholder:text-slate-500"></textarea>
+                        
+                        <div class="flex items-center justify-between px-2 pb-1 pt-2">
+                            <div class="flex items-center gap-2 text-xs font-medium text-slate-500">
+                                <span id="statusIndicator" class="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
+                                <span id="statusText">Ready</span>
+                            </div>
+                            <button id="sendBtn" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md transition-all hover:bg-indigo-500 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500" aria-label="Send message">
+                                <svg class="h-5 w-5 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mt-3 text-center text-[10px] text-slate-500">
+                        AI-generated content may be inaccurate or misleading. Verify important information.
+                    </div>
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <script>
+        // CONFIGURATION VARIABLES
+        const API_URL = "https://qwen.production-ai.opendnf.cloud/api/chat";
+        const STORAGE_KEY = "qwen_local_chat_v3";
+        const ACTIVE_KEY = "qwen_local_active_v3";
+        const MEMORIES_KEY = "qwen_local_memories_v3";
+        const MEMORY_LIMIT = 10;
+        
+        // DOM ELEMENT REFERENCES
+        const $ = (id) => document.getElementById(id);
+        const ui = {
+            splash: $("splash"),
+            splashBar: $("splashBar"),
+            splashText: $("splashText"),
+            splashOrb: $("splashOrb"),
+            sidebar: $("sidebar"),
+            sidebarOverlay: $("sidebarOverlay"),
+            menuToggleBtn: $("menuToggleBtn"),
+            closeSidebarBtn: $("closeSidebarBtn"),
+            chatList: $("chatList"),
+            chatCount: $("chatCount"),
+            messageArea: $("messages"),
+            emptyState: $("emptyState"),
+            activeChatTitle: $("activeChatTitle"),
+            prompt: $("prompt"),
+            sendBtn: $("sendBtn"),
+            newChatBtn: $("newChatBtn"),
+            renameBtn: $("renameBtn"),
+            deleteBtn: $("deleteBtn"),
+            exportBtn: $("exportBtn"),
+            importInput: $("importInput"),
+            statusText: $("statusText"),
+            statusIndicator: $("statusIndicator"),
+            memoryInput: $("memoryInput"),
+            addMemoryBtn: $("addMemoryBtn"),
+            memoryList: $("memoryList"),
+            memoryCount: $("memoryCount"),
+            clearMemoriesBtn: $("clearMemoriesBtn"),
+            toggleMemoryBtn: $("toggleMemoryBtn"),
+        };
+        
+        // STATE MANAGEMENT
+        let chats = [];
+        let activeChatId = localStorage.getItem(ACTIVE_KEY) || "";
+        let memories = [];
+        let isSending = false;
+        let isMemoryVisible = true;
+        let isSidebarOpen = false;
+        
+        // MARKDOWN & SANITIZATION CONFIGURATION
+        marked.setOptions({ breaks: true, gfm: true });
+        
+        // UTILITY FUNCTIONS
+        function generateUid() {
+            return crypto.randomUUID ? crypto.randomUUID() : "id-" + Math.random().toString(36).slice(2);
+        }
+        
+        function getCurrentTimestamp() {
+            return new Date().toISOString();
+        }
+        
+        function escapeHtmlEntities(str) {
+            return String(str)
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
+        }
+        
+        function parseMarkdownToHtml(text) {
+            const html = marked.parse(text || "");
+            return DOMPurify.sanitize(html);
+        }
+        
+        function updateApplicationStatus(text, state = 'ready') {
+            ui.statusText.textContent = text;
+            
+            // Visual indicator configuration
+            ui.statusIndicator.className = "h-2 w-2 rounded-full shadow-sm transition-colors duration-300 ";
+            switch(state) {
+                case 'working': ui.statusIndicator.className += "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)] animate-pulse"; break;
+                case 'error': ui.statusIndicator.className += "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]"; break;
+                default: ui.statusIndicator.className += "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]";
+            }
+        }
+        
+        function scrollToBottom() {
+            ui.messageArea.scrollTop = ui.messageArea.scrollHeight;
+        }
+        
+        function resizeInputArea() {
+            ui.prompt.style.height = "auto";
+            ui.prompt.style.height = Math.min(ui.prompt.scrollHeight, 240) + "px";
+        }
+
+        function toggleMobileSidebar(forceState) {
+            isSidebarOpen = forceState !== undefined ? forceState : !isSidebarOpen;
+            if (isSidebarOpen) {
+                ui.sidebar.classList.remove('-translate-x-full');
+                ui.sidebarOverlay.classList.remove('hidden');
+                setTimeout(() => ui.sidebarOverlay.classList.remove('opacity-0'), 10);
+            } else {
+                ui.sidebar.classList.add('-translate-x-full');
+                ui.sidebarOverlay.classList.add('opacity-0');
+                setTimeout(() => ui.sidebarOverlay.classList.add('hidden'), 300);
+            }
+        }
+        
+        // DATA PERSISTENCE
+        function saveApplicationState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
+                localStorage.setItem(ACTIVE_KEY, activeChatId);
+                localStorage.setItem(MEMORIES_KEY, JSON.stringify(memories));
+            } catch (err) {
+                console.error("Failed to save application state to localStorage:", err);
+            }
+        }
+        
+        function loadApplicationState() {
+            try {
+                chats = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+                memories = JSON.parse(localStorage.getItem(MEMORIES_KEY) || "[]");
+            } catch (err) {
+                console.error("Failed to parse localized storage data. Resetting to default values.", err);
+                chats = [];
+                memories = [];
+            }
+        
+            if (!Array.isArray(chats)) chats = [];
+            if (!Array.isArray(memories)) memories = [];
+        
+            chats = chats
+                .filter((c) => c && typeof c === "object")
+                .map((c) => ({
+                    id: String(c.id || generateUid()),
+                    title: String(c.title || "New chat"),
+                    messages: Array.isArray(c.messages) ? c.messages : [],
+                    createdAt: String(c.createdAt || getCurrentTimestamp()),
+                    updatedAt: String(c.updatedAt || getCurrentTimestamp()),
+                }));
+        
+            memories = memories
+                .filter((m) => typeof m === "string")
+                .map((m) => m.trim())
+                .filter(Boolean)
+                .slice(0, MEMORY_LIMIT);
+        
+            activeChatId = localStorage.getItem(ACTIVE_KEY) || "";
+            if (!activeChatId || !chats.some((c) => c.id === activeChatId)) {
+                activeChatId = chats[0]?.id || "";
+            }
+        
+            if (!activeChatId) initializeNewChat(false);
+            saveApplicationState();
+        }
+        
+        // CHAT MANAGEMENT
+        function fetchActiveChatSession() {
+            return chats.find((c) => c.id === activeChatId) || null;
+        }
+        
+        function initializeNewChat(triggerRender = true) {
+            const chat = {
+                id: generateUid(),
+                title: "New chat",
+                messages: [],
+                createdAt: getCurrentTimestamp(),
+                updatedAt: getCurrentTimestamp(),
+            };
+            chats.unshift(chat);
+            activeChatId = chat.id;
+            saveApplicationState();
+            if (triggerRender) renderApplicationUI();
+            
+            // Close mobile sidebar if opening new chat
+            if (window.innerWidth < 768) toggleMobileSidebar(false);
+            
+            return chat;
+        }
+        
+        function removeChatSession(chatId) {
+            chats = chats.filter((c) => c.id !== chatId);
+            if (activeChatId === chatId) {
+                activeChatId = chats[0]?.id || "";
+            }
+            if (!activeChatId) initializeNewChat(false);
+            
+            saveApplicationState();
+            renderApplicationUI();
+            updateApplicationStatus("Chat deleted successfully.", 'ready');
+        }
+        
+        function promptRenameActiveChat() {
+            const chat = fetchActiveChatSession();
+            if (!chat) return;
+        
+            const nextTitle = prompt("Enter new chat title:", chat.title || "New chat");
+            if (nextTitle === null) return;
+        
+            const trimmedTitle = nextTitle.trim().slice(0, 80);
+            chat.title = trimmedTitle || "New chat";
+            chat.updatedAt = getCurrentTimestamp();
+            
+            saveApplicationState();
+            renderApplicationUI();
+        }
+        
+        // MEMORY MANAGEMENT
+        function insertPersistentMemory(text) {
+            const validatedText = text.trim();
+            if (!validatedText) return;
+            if (memories.length >= MEMORY_LIMIT) {
+                alert(`Memory limit reached. Maximum ${MEMORY_LIMIT} items allowed.`);
+                return;
+            }
+            memories.unshift(validatedText.slice(0, 220));
+            saveApplicationState();
+            renderMemoryComponent();
+            ui.memoryInput.value = "";
+            updateApplicationStatus("Memory context appended.", 'ready');
+        }
+        
+        function removePersistentMemory(index) {
+            memories.splice(index, 1);
+            saveApplicationState();
+            renderMemoryComponent();
+        }
+        
+        function purgeAllMemories() {
+            if (!confirm("Are you sure you want to clear all persistent memory context?")) return;
+            memories = [];
+            saveApplicationState();
+            renderMemoryComponent();
+            updateApplicationStatus("Memory context cleared.", 'ready');
+        }
+        
+        function compileMemoryContextBlock() {
+            if (!memories.length) return "";
+            return [
+                "System instructions regarding persistent memory (follow strictly when relevant):",
+                ...memories.map((m, i) => `${i + 1}. ${m}`),
+            ].join("\n");
+        }
+        
+        function executeAutoTitleGeneration(chat) {
+            if (!chat || chat.title !== "New chat") return;
+            const firstUserMessage = chat.messages.find((m) => m.role === "user");
+            if (!firstUserMessage) return;
+        
+            const generatedTitle = firstUserMessage.content
+                .replace(/```[\s\S]*?```/g, " ")
+                .replace(/\s+/g, " ")
+                .trim()
+                .replace(/[.!?]+$/g, "")
+                .slice(0, 40);
+        
+            if (generatedTitle) chat.title = generatedTitle;
+        }
+        
+        // UI RENDERING ENGINE
+        function renderChatSidebarList() {
+            ui.chatList.innerHTML = "";
+            ui.chatCount.textContent = `${chats.length}`;
+        
+            if (!chats.length) {
+                ui.chatList.innerHTML = `
+                    <div class="rounded-xl border border-dashed border-white/10 p-4 text-center text-xs text-slate-500">
+                        No active conversations.
+                    </div>
+                `;
+                return;
+            }
+        
+            for (const chat of chats) {
+                const item = document.createElement("div");
+                const isActive = chat.id === activeChatId;
+                item.className = `group relative cursor-pointer rounded-xl border p-3 transition-all duration-200 ${isActive ? "border-indigo-500/30 bg-indigo-500/10 shadow-sm" : "border-transparent hover:bg-white/5"}`;
+        
+                const lastMessage = chat.messages.at(-1)?.content || "No messages yet";
+        
+                item.innerHTML = `
+                    <div class="flex items-start gap-3 pr-6">
+                        <div class="min-w-0 flex-1">
+                            <div class="text-[13px] font-semibold ${isActive ? 'text-indigo-300' : 'text-slate-300'} truncate">${escapeHtmlEntities(chat.title)}</div>
+                            <div class="mt-1 text-[11px] text-slate-500 line-clamp-2 leading-relaxed">${escapeHtmlEntities(lastMessage)}</div>
+                        </div>
+                    </div>
+                    <button data-del="${chat.id}" class="absolute right-2 top-2 rounded-lg p-1.5 text-slate-500 opacity-0 transition-all group-hover:opacity-100 hover:bg-rose-500/10 hover:text-rose-400 focus:opacity-100" aria-label="Delete chat">
+                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                `;
+        
+                item.addEventListener("click", (e) => {
+                    if (e.target.closest("[data-del]")) return;
+                    activeChatId = chat.id;
+                    saveApplicationState();
+                    renderApplicationUI();
+                    if (window.innerWidth < 768) toggleMobileSidebar(false);
+                });
+        
+                item.querySelector("[data-del]").addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    if(confirm("Permanently delete this chat?")) removeChatSession(chat.id);
+                });
+        
+                ui.chatList.appendChild(item);
+            }
+        }
+        
+        function renderMemoryComponent() {
+            ui.memoryList.innerHTML = "";
+            ui.memoryCount.textContent = `${memories.length}/${MEMORY_LIMIT}`;
+            ui.memoryList.style.display = isMemoryVisible ? "block" : "none";
+        
+            if (!isMemoryVisible) return;
+        
+            if (!memories.length) {
+                ui.memoryList.innerHTML = `
+                    <div class="rounded-xl border border-dashed border-white/5 bg-black/20 p-3 text-center text-xs text-slate-500 mt-2">
+                        No persistent context defined.
+                    </div>
+                `;
+                return;
+            }
+        
+            memories.forEach((m, i) => {
+                const row = document.createElement("div");
+                row.className = "group relative rounded-xl bg-black/30 border border-white/5 p-2.5 text-xs text-slate-300 mt-2 hover:bg-black/40 transition-colors";
+                row.innerHTML = `
+                    <div class="flex items-start gap-2 pr-6">
+                        <div class="min-w-0 flex-1 break-words leading-relaxed">${escapeHtmlEntities(m)}</div>
+                        <button class="absolute right-1 top-1 rounded-md p-1.5 text-slate-500 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-rose-500/10 hover:text-rose-400" aria-label="Remove memory">
+                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                    </div>
+                `;
+                row.querySelector("button").addEventListener("click", () => removePersistentMemory(i));
+                ui.memoryList.appendChild(row);
+            });
+        }
+        
+        function renderMainChatArea() {
+            const chat = fetchActiveChatSession();
+            ui.messageArea.innerHTML = "";
+        
+            if (!chat || !chat.messages.length) {
+                ui.messageArea.appendChild(ui.emptyState);
+                ui.emptyState.style.display = "block";
+                ui.activeChatTitle.textContent = chat?.title || "New chat";
+                return;
+            }
+        
+            ui.emptyState.style.display = "none";
+            ui.activeChatTitle.textContent = chat.title || "New chat";
+        
+            for (const msg of chat.messages) {
+                injectMessageBubble(msg.role, msg.content);
+            }
+        
+            scrollToBottom();
+        }
+        
+        function injectMessageBubble(role, text) {
+            const row = document.createElement("div");
+            row.className = "fade-enter mx-auto mb-6 max-w-3xl";
+        
+            const container = document.createElement("div");
+            const isUser = role === "user";
+            container.className = isUser ? "flex justify-end" : "flex justify-start items-start gap-4";
+        
+            // Avatar for Assistant
+            if (!isUser) {
+                const avatar = document.createElement("div");
+                avatar.className = "shrink-0 flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500/20 shadow-sm border border-indigo-500/30 hidden sm:flex";
+                avatar.innerHTML = `<span class="text-xs font-bold text-indigo-300">AI</span>`;
+                container.appendChild(avatar);
+            }
+
+            const bubble = document.createElement("div");
+            bubble.className = isUser
+                ? "max-w-[90%] sm:max-w-[85%] rounded-[1.25rem] rounded-tr-sm bg-indigo-600 px-5 py-3.5 shadow-md text-[15px] leading-relaxed text-white"
+                : "max-w-[95%] sm:max-w-[85%] rounded-[1.25rem] rounded-tl-sm border border-white/5 bg-[#0f172a]/80 px-5 py-3.5 text-[15px] leading-relaxed markdown-body shadow-sm";
+        
+            const contentWrapper = document.createElement("div");
+            contentWrapper.innerHTML = isUser
+                ? `<div class="whitespace-pre-wrap break-words">${escapeHtmlEntities(text)}</div>`
+                : parseMarkdownToHtml(text);
+        
+            bubble.appendChild(contentWrapper);
+            container.appendChild(bubble);
+            row.appendChild(container);
+            ui.messageArea.appendChild(row);
+        
+            if (!isUser) {
+                requestAnimationFrame(() => hljs.highlightAll());
+            }
+            return contentWrapper;
+        }
+        
+        function renderApplicationUI() {
+            renderChatSidebarList();
+            renderMemoryComponent();
+            renderMainChatArea();
+            saveApplicationState();
+        }
+        
+        // NETWORK COMMUNICATIONS
+        async function transmitPromptPayload(chat) {
+            const memoryContext = compileMemoryContextBlock();
+            const payloadMessages = [];
+        
+            if (memoryContext) {
+                payloadMessages.push({
+                    role: "system", // Best practice is to use system role for persistent instructions if API supports it
+                    content: memoryContext
+                });
+            }
+        
+            payloadMessages.push(...chat.messages.map((m) => ({
+                role: m.role,
+                content: m.content,
+            })));
+        
+            const networkRequest = await fetch(API_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    messages: payloadMessages,
+                    temperature: 0.35,
+                }),
+            });
+        
+            const rawResponseText = await networkRequest.text();
+            let parsedData = {};
+            try {
+                parsedData = rawResponseText ? JSON.parse(rawResponseText) : {};
+            } catch (err) {
+                console.error("JSON parsing error on API response:", err);
+                parsedData = { error: rawResponseText };
+            }
+        
+            if (!networkRequest.ok) {
+                throw new Error(parsedData?.detail || parsedData?.error || rawResponseText || `HTTP ${networkRequest.status}`);
+            }
+        
+            return String(parsedData.assistant || "").trim();
+        }
+        
+        // MESSAGE TRANSMISSION FLOW
+        async function executeMessageTransmission() {
+            const promptText = ui.prompt.value.trim();
+            if (!promptText || isSending) return;
+        
+            const chatSession = fetchActiveChatSession() || initializeNewChat(false);
+            isSending = true;
+            
+            // UI Locking
+            ui.sendBtn.disabled = true;
+            ui.newChatBtn.disabled = true;
+            ui.prompt.disabled = true;
+            updateApplicationStatus("Processing request...", 'working');
+        
+            ui.prompt.value = "";
+            resizeInputArea();
+        
+            chatSession.messages.push({ role: "user", content: promptText, createdAt: getCurrentTimestamp() });
+            executeAutoTitleGeneration(chatSession);
+            chatSession.updatedAt = getCurrentTimestamp();
+            saveApplicationState();
+            renderMainChatArea();
+            renderChatSidebarList();
+        
+            // Inject skeleton/loading state
+            const pendingNode = injectMessageBubble("assistant", '<span class="flex space-x-1 items-center h-5"><span class="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce"></span><span class="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></span><span class="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></span></span>');
+            scrollToBottom();
+        
+            try {
+                const apiReply = await transmitPromptPayload(chatSession);
+                const finalResponseText = apiReply || "I apologize, but I could not formulate a response.";
+        
+                pendingNode.innerHTML = parseMarkdownToHtml(finalResponseText);
+                chatSession.messages.push({ role: "assistant", content: finalResponseText, createdAt: getCurrentTimestamp() });
+                chatSession.updatedAt = getCurrentTimestamp();
+                executeAutoTitleGeneration(chatSession);
+                
+                saveApplicationState();
+                renderChatSidebarList();
+                ui.activeChatTitle.textContent = chatSession.title;
+                requestAnimationFrame(() => hljs.highlightAll());
+                updateApplicationStatus("Ready", 'ready');
+                
+            } catch (networkError) {
+                console.error("Message transmission failed:", networkError);
+                pendingNode.innerHTML = `<div class="rounded-lg bg-rose-500/10 border border-rose-500/20 px-4 py-3 text-sm text-rose-300"><b>Connection Error:</b><br>${escapeHtmlEntities(String(networkError?.message || networkError))}</div>`;
+                updateApplicationStatus("Transmission failed.", 'error');
+            } finally {
+                isSending = false;
+                ui.sendBtn.disabled = false;
+                ui.newChatBtn.disabled = false;
+                ui.prompt.disabled = false;
+                setTimeout(() => ui.prompt.focus(), 10);
+                resizeInputArea();
+            }
+        }
+        
+        // EXPORT & IMPORT MODULE
+        function executeDataExport() {
+            const dataBlob = new Blob([
+                JSON.stringify({
+                    chats,
+                    activeChatId,
+                    memories,
+                    exportedAt: getCurrentTimestamp()
+                }, null, 2)
+            ], { type: "application/json" });
+        
+            const objectUrl = URL.createObjectURL(dataBlob);
+            const downloadAnchor = document.createElement("a");
+            downloadAnchor.href = objectUrl;
+            downloadAnchor.download = `qwen-chat-backup-${new Date().getTime()}.json`;
+            downloadAnchor.click();
+            URL.revokeObjectURL(objectUrl);
+            updateApplicationStatus("Data exported successfully.", 'ready');
+        }
+        
+        async function processDataImport(fileBlob) {
+            const rawText = await fileBlob.text();
+            const parsedData = JSON.parse(rawText);
+        
+            if (!parsedData || !Array.isArray(parsedData.chats)) {
+                throw new Error("Invalid file structure. Missing 'chats' array.");
+            }
+        
+            chats = parsedData.chats
+                .filter((c) => c && typeof c === "object")
+                .map((c) => ({
+                    id: String(c.id || generateUid()),
+                    title: String(c.title || "Restored Chat"),
+                    messages: Array.isArray(c.messages) ? c.messages : [],
+                    createdAt: String(c.createdAt || getCurrentTimestamp()),
+                    updatedAt: String(c.updatedAt || getCurrentTimestamp()),
+                }));
+        
+            memories = Array.isArray(parsedData.memories)
+                ? parsedData.memories.filter((m) => typeof m === "string").map((m) => m.trim()).filter(Boolean).slice(0, MEMORY_LIMIT)
+                : [];
+        
+            activeChatId = String(parsedData.activeChatId || chats[0]?.id || "");
+            if (!activeChatId && chats[0]) activeChatId = chats[0].id;
+            if (!activeChatId) initializeNewChat(false);
+        
+            saveApplicationState();
+            renderApplicationUI();
+            updateApplicationStatus("Data imported successfully.", 'ready');
+        }
+        
+        // ANIMATION SEQUENCES
+        function executeSplashSequence() {
+            anime({
+                targets: ui.splashOrb,
+                scale: [0.8, 1],
+                rotate: [0, 360],
+                duration: 1500,
+                easing: 'easeOutElastic(1, .6)'
+            });
+            
+            anime({
+                targets: ui.splashBar,
+                width: ['0%', '100%'],
+                duration: 1200,
+                easing: 'easeInOutQuart'
+            });
+            
+            anime({
+                targets: ui.splashText,
+                opacity: [0.4, 1],
+                duration: 600,
+                direction: 'alternate',
+                loop: true,
+                easing: 'linear'
+            });
+            
+            window.addEventListener('load', () => {
+                setTimeout(() => {
+                    ui.splash.classList.add('opacity-0');
+                    setTimeout(() => {
+                        ui.splash.style.display = 'none';
+                        ui.prompt.focus();
+                    }, 500);
+                }, 1000);
+            });
+        }
+        
+        // EVENT LISTENER BINDINGS
+        ui.newChatBtn.addEventListener("click", () => {
+            if (isSending) return;
+            initializeNewChat();
+            ui.prompt.focus();
+        });
+        
+        ui.renameBtn.addEventListener("click", () => {
+            if (isSending) return;
+            promptRenameActiveChat();
+        });
+        
+        ui.deleteBtn.addEventListener("click", () => {
+            if (isSending) return;
+            const currentChat = fetchActiveChatSession();
+            if (!currentChat) return;
+            if (!confirm(`Are you sure you want to delete "${currentChat.title}"?`)) return;
+            removeChatSession(currentChat.id);
+        });
+        
+        ui.sendBtn.addEventListener("click", executeMessageTransmission);
+        
+        ui.prompt.addEventListener("input", resizeInputArea);
+        ui.prompt.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) { // Changed to standard Shift+Enter for new line
+                e.preventDefault();
+                executeMessageTransmission();
+            }
+        });
+        
+        ui.addMemoryBtn.addEventListener("click", () => insertPersistentMemory(ui.memoryInput.value));
+        ui.memoryInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                insertPersistentMemory(ui.memoryInput.value);
+            }
+        });
+        
+        ui.clearMemoriesBtn.addEventListener("click", purgeAllMemories);
+        ui.toggleMemoryBtn.addEventListener("click", () => {
+            isMemoryVisible = !isMemoryVisible;
+            renderMemoryComponent();
+            ui.toggleMemoryBtn.textContent = isMemoryVisible ? "Hide Context" : "Show Context";
+        });
+        
+        ui.exportBtn.addEventListener("click", executeDataExport);
+        ui.importInput.addEventListener("change", async () => {
+            const targetFile = ui.importInput.files?.[0];
+            if (!targetFile) return;
+            try {
+                await processDataImport(targetFile);
+            } catch (err) {
+                console.error("Import operation failed:", err);
+                alert("Import failed: " + String(err?.message || err));
+            } finally {
+                ui.importInput.value = "";
+            }
+        });
+
+        ui.menuToggleBtn.addEventListener("click", () => toggleMobileSidebar(true));
+        ui.closeSidebarBtn.addEventListener("click", () => toggleMobileSidebar(false));
+        ui.sidebarOverlay.addEventListener("click", () => toggleMobileSidebar(false));
+        
+        // APPLICATION INITIALIZATION
+        (function bootstrapApplication() {
+            try {
+                console.log("Initializing Application Core...");
+                loadApplicationState();
+                renderApplicationUI();
+                resizeInputArea();
+                executeSplashSequence();
+                updateApplicationStatus("System Ready", 'ready');
+            } catch (initializationError) {
+                console.error("Critical System Failure during Bootstrap:", initializationError);
+                ui.messageArea.innerHTML = `
+                    <div class="mx-auto mt-10 max-w-2xl rounded-[1.5rem] border border-rose-500/20 bg-rose-500/10 p-6 text-rose-200">
+                        <div class="text-lg font-bold">Fatal Initialization Error</div>
+                        <div class="mt-2 text-sm opacity-80 font-mono break-words">${escapeHtmlEntities(String(initializationError?.message || initializationError))}</div>
+                    </div>
+                `;
+            }
+        })();
+    </script>
+</body>
+</html>
